@@ -1,341 +1,382 @@
-class DamasGame {
-  constructor() {
-    this.size = 8;
-    this.board = [];
-    this.current = 1; // 1 = red (player), -1 = black (computer)
-    this.selected = null;
-    this.legalMoves = [];
-    this.history = [];
-    this.rules = 'brasileira'; // 'brasileira' or 'americana'
-    this.capturesRed = 0;
-    this.capturesBlack = 0;
+class TrucoGame {
+    constructor() {
+        this.deck = [];
+        this.playerHand = [];
+        this.computerHand = [];
+        this.vira = null;
+        this.manilhas = [];
+        this.playerCard = null;
+        this.computerCard = null;
+        this.playerScore = 0;
+        this.computerScore = 0;
+        this.currentRound = 1;
+        this.playerRoundWins = 0;
+        this.computerRoundWins = 0;
+        this.trucoRequested = false;
+        this.trucoValue = 1;
+        this.waitingTrucoResponse = false;
+        this.gameActive = true;
+        this.selectedCardIndex = null;
 
-    this.boardEl = document.getElementById('board');
-    this.statusEl = document.getElementById('status');
-    this.scoreRedEl = document.getElementById('score-red');
-    this.scoreBlackEl = document.getElementById('score-black');
+        this.roundStarter = 'player';
+        this.turn = 'player';
+        this.handStarter = 'player';
 
-    document.getElementById('btn-new').onclick = () => this.newGame();
-    document.getElementById('btn-rule').onclick = () => this.toggleRule();
-    document.getElementById('btn-undo').onclick = () => this.undo();
+        this.rankOrder = ['4','5','6','7','Q','J','K','A','2','3'];
+        this.suits = ['♥','♦','♠','♣'];
 
-    this.newGame();
-  }
+        this.init();
+        this.setupEventListeners();
+    }
 
-  newGame() {
-    this.board = Array.from({length:8},()=>Array(8).fill(0));
-    for(let r=0;r<8;r++){
-      for(let c=0;c<8;c++){
-        if((r+c)%2===1){
-          if(r<3) this.board[r][c] = -1;
-          else if(r>4) this.board[r][c] = 1;
+    init() {
+        this.createDeck();
+        this.shuffleDeck();
+        this.distributeCards();
+        this.roundStarter = this.handStarter;
+        this.turn = this.roundStarter;
+        this.render();
+        this.updateStatus(this.turn === 'player'? 'Sua vez! Selecione uma carta.' : 'Computador começa...');
+        if (this.turn === 'computer') {
+            setTimeout(() => this.computerPlayFirst(), 1000);
         }
-      }
-    }
-    this.current = 1;
-    this.selected = null;
-    this.legalMoves = [];
-    this.history = [];
-    this.capturesRed = 0;
-    this.capturesBlack = 0;
-    this.updateScores();
-    this.render();
-    this.updateStatus('Sua vez!');
-  }
-
-  toggleRule(){
-    this.rules = this.rules==='brasileira'? 'americana' : 'brasileira';
-    document.getElementById('btn-rule').textContent = `Regra: ${this.rules.charAt(0).toUpperCase()+this.rules.slice(1)}`;
-    this.updateStatus(`Regra alterada para ${this.rules}. Sua vez!`);
-    this.selected = null;
-    this.legalMoves = [];
-    this.render();
-  }
-
-  inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
-
-  isKing(p){ return Math.abs(p)===2; }
-
-  getAllMoves(player){
-    const moves = [];
-    const captures = [];
-    for(let r=0;r<8;r++){
-      for(let c=0;c<8;c++){
-        if(this.board[r][c]*player>0){
-          const res = this.getPieceMoves(r,c);
-          if(res.captures.length) captures.push(...res.captures);
-          else moves.push(...res.moves);
-        }
-      }
-    }
-    if(captures.length){
-      if(this.rules==='brasileira'){
-        const maxCap = Math.max(...captures.map(m=>m.captures.length));
-        return captures.filter(m=>m.captures.length===maxCap);
-      }
-      return captures;
-    }
-    return moves;
-  }
-
-  getPieceMoves(r,c){
-    const piece = this.board[r][c];
-    if(!piece) return {moves:[],captures:[]};
-    const player = Math.sign(piece);
-    const isKing = this.isKing(piece);
-    const moves = [];
-    const captures = [];
-
-    const dirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
-    const forwardDirs = player===1? [[-1,-1],[-1,1]] : [[1,-1],[1,1]];
-
-    // Captures
-    const capDirs = isKing || this.rules==='brasileira'? dirs : forwardDirs;
-    for(const [dr,dc] of capDirs){
-      if(isKing && this.rules==='brasileira'){
-        // flying king capture
-        let nr=r+dr, nc=c+dc;
-        while(this.inBounds(nr,nc) && this.board[nr][nc]===0){ nr+=dr; nc+=dc; }
-        if(!this.inBounds(nr,nc)) continue;
-        if(this.board[nr][nc]*player<0){
-          let lr=nr+dr, lc=nc+dc;
-          while(this.inBounds(lr,lc) && this.board[lr][lc]===0){
-            const seq = this.exploreCapture(r,c,lr,lc,nr,nc,player);
-            if(seq) captures.push(seq);
-            lr+=dr; lc+=dc;
-          }
-        }
-      }else{
-        const mr=r+dr, mc=c+dc, lr=r+2*dr, lc=c+2*dc;
-        if(this.inBounds(lr,lc) && this.board[mr][mc]*player<0 && this.board[lr][lc]===0){
-          const seq = this.exploreCapture(r,c,lr,lc,mr,mc,player);
-          if(seq) captures.push(seq);
-        }
-      }
     }
 
-    if(captures.length) return {moves:[],captures};
-
-    // Simple moves
-    const moveDirs = isKing? dirs : forwardDirs;
-    for(const [dr,dc] of moveDirs){
-      if(isKing && this.rules==='brasileira'){
-        let nr=r+dr, nc=c+dc;
-        while(this.inBounds(nr,nc) && this.board[nr][nc]===0){
-          moves.push({from:[r,c],to:[nr,nc],captures:[]});
-          nr+=dr; nc+=dc;
-        }
-      }else{
-        const nr=r+dr, nc=c+dc;
-        if(this.inBounds(nr,nc) && this.board[nr][nc]===0){
-          moves.push({from:[r,c],to:[nr,nc],captures:[]});
-        }
-      }
-    }
-    return {moves,captures};
-  }
-
-  exploreCapture(fr,fc,tr,tc,cr,cc,player){
-    // Simulate one capture and continue chain
-    const boardCopy = this.board.map(row=>row.slice());
-    const piece = boardCopy[fr][fc];
-    boardCopy[fr][fc]=0;
-    boardCopy[cr][cc]=0;
-    let newPiece = piece;
-    if(!this.isKing(piece) && ((player===1 && tr===0) || (player===-1 && tr===7))){
-      newPiece = player*2;
-    }
-    boardCopy[tr][tc]=newPiece;
-
-    const further = this.findFurtherCaptures(tr,tc,boardCopy,player);
-    if(further.length){
-      // prepend current capture
-      return {
-        from:[fr,fc],
-        to:further[0].to,
-        captures:[[cr,cc],...further[0].captures],
-        sequence:true
-      };
-    }
-    return {from:[fr,fc],to:[tr,tc],captures:[[cr,cc]]};
-  }
-
-  findFurtherCaptures(r,c,board,player){
-    const piece = board[r][c];
-    const isKing = this.isKing(piece);
-    const dirs = isKing || this.rules==='brasileira'? [[-1,-1],[-1,1],[1,-1],[1,1]] : (player===1?[[-1,-1],[-1,1]]:[[1,-1],[1,1]]);
-    const caps=[];
-    for(const [dr,dc] of dirs){
-      if(isKing && this.rules==='brasileira'){
-        let nr=r+dr, nc=c+dc;
-        while(this.inBounds(nr,nc) && board[nr][nc]===0){nr+=dr;nc+=dc;}
-        if(!this.inBounds(nr,nc)) continue;
-        if(board[nr][nc]*player<0){
-          let lr=nr+dr, lc=nc+dc;
-          while(this.inBounds(lr,lc) && board[lr][lc]===0){
-            const nb = board.map(row=>row.slice());
-            nb[r][c]=0; nb[nr][nc]=0; nb[lr][lc]=piece;
-            const deeper = this.findFurtherCaptures(lr,lc,nb,player);
-            if(deeper.length){
-              caps.push({to:deeper[0].to,captures:[[nr,nc],...deeper[0].captures]});
-            }else{
-              caps.push({to:[lr,lc],captures:[[nr,nc]]});
+    createDeck() {
+        this.deck = [];
+        for (let suit of this.suits) {
+            for (let rank of this.rankOrder) {
+                this.deck.push({ rank, suit });
             }
-            lr+=dr; lc+=dc;
-          }
         }
-      }else{
-        const mr=r+dr, mc=c+dc, lr=r+2*dr, lc=c+2*dc;
-        if(this.inBounds(lr,lc) && board[mr][mc]*player<0 && board[lr][lc]===0){
-          const nb = board.map(row=>row.slice());
-          nb[r][c]=0; nb[mr][mc]=0; nb[lr][lc]=piece;
-          const deeper = this.findFurtherCaptures(lr,lc,nb,player);
-          if(deeper.length){
-            caps.push({to:deeper[0].to,captures:[[mr,mc],...deeper[0].captures]});
-          }else{
-            caps.push({to:[lr,lc],captures:[[mr,mc]]});
-          }
-        }
-      }
     }
-    return caps;
-  }
 
-  render(){
-    this.boardEl.innerHTML='';
-    for(let r=0;r<8;r++){
-      for(let c=0;c<8;c++){
-        const sq=document.createElement('div');
-        sq.className=`square ${ (r+c)%2===0?'light':'dark' }`;
-        if((r+c)%2===1) sq.classList.add('playable');
-        sq.dataset.r=r; sq.dataset.c=c;
-        const piece=this.board[r][c];
-        if(piece!==0){
-          const p=document.createElement('div');
-          p.className=`piece ${piece>0?'red':'black'} ${this.isKing(piece)?'king':''}`;
-          sq.appendChild(p);
+    shuffleDeck() {
+        for (let i = this.deck.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [this.deck[i], this.deck[j]] = [this.deck[j], this.deck[i]];
         }
-        if(this.selected && this.selected[0]===r && this.selected[1]===c){
-          sq.querySelector('.piece')?.classList.add('selected');
-        }
-        const isTarget = this.legalMoves.some(m=>m.to[0]===r && m.to[1]===c);
-        if(isTarget){
-          sq.classList.add('highlight');
-          if(this.legalMoves.find(m=>m.to[0]===r && m.to[1]===c && m.captures.length)) sq.classList.add('capture');
-        }
-        sq.onclick=()=>this.onSquareClick(r,c);
-        this.boardEl.appendChild(sq);
-      }
     }
-  }
 
-  onSquareClick(r,c){
-    if(this.current!==-1){ // player turn only
-      const piece=this.board[r][c];
-      if(this.selected){
-        const move=this.legalMoves.find(m=>m.to[0]===r && m.to[1]===c);
-        if(move){
-          this.makeMove(move);
-          return;
+    distributeCards() {
+        this.playerHand = this.deck.splice(0, 3);
+        this.computerHand = this.deck.splice(0, 3);
+        this.vira = this.deck.shift();
+        this.sortHand(this.playerHand);
+        this.sortHand(this.computerHand);
+        this.calculateManilhas();
+    }
+
+    sortHand(hand) {
+        hand.sort((a, b) => this.getCardValue(b) - this.getCardValue(a));
+    }
+
+    calculateManilhas() {
+        const viraIndex = this.rankOrder.indexOf(this.vira.rank);
+        const manilhaRank = this.rankOrder[(viraIndex + 1) % this.rankOrder.length];
+        this.manilhas = this.suits.map(suit => ({ rank: manilhaRank, suit }));
+    }
+
+    getCardValue(card) {
+        const isManilha = this.manilhas.some(m => m.rank === card.rank);
+        if (isManilha) {
+            const suitOrder = { '♣':4, '♥':3, '♠':2, '♦':1 };
+            return 100 + suitOrder[card.suit];
         }
-      }
-      if(piece>0){
-        this.selected=[r,c];
-        const all = this.getAllMoves(1);
-        const pieceMoves = all.filter(m=>m.from[0]===r && m.from[1]===c);
-        this.legalMoves = pieceMoves.length? pieceMoves : [];
-        // If no piece-specific moves but captures exist elsewhere, force capture
-        if(this.legalMoves.length===0 && all.some(m=>m.captures.length)){
-          this.legalMoves=[];
-          this.selected=null;
-          this.updateStatus('Captura obrigatória em outra peça!');
+        return this.rankOrder.indexOf(card.rank);
+    }
+
+    compareCards(a, b) {
+        const va = this.getCardValue(a);
+        const vb = this.getCardValue(b);
+        if (va > vb) return 'player';
+        if (vb > va) return 'computer';
+        return 'draw';
+    }
+
+    playRound() {
+        const result = this.compareCards(this.playerCard, this.computerCard);
+        const pStr = `${this.playerCard.rank}${this.playerCard.suit}`;
+        const cStr = `${this.computerCard.rank}${this.computerCard.suit}`;
+
+        if (result === 'player') {
+            this.playerRoundWins++;
+            this.updateStatus(`✅ Você venceu! (${pStr} > ${cStr})`);
+        } else if (result === 'computer') {
+            this.computerRoundWins++;
+            this.updateStatus(`❌ Computador venceu! (${cStr} > ${pStr})`);
+        } else {
+            this.updateStatus(`⚖️ Empate! (${pStr} = ${cStr})`);
         }
+
         this.render();
-      }else{
-        this.selected=null;
-        this.legalMoves=[];
+
+        const winner = this.checkHandWinner();
+        if (winner!== null) {
+            setTimeout(() => this.endHand(winner), 1800);
+            return;
+        }
+
+        // Prepara próxima rodada
+        this.currentRound++;
+        this.playerCard = null;
+        this.computerCard = null;
+        this.selectedCardIndex = null;
+
+        // Quem venceu começa a próxima. Empate mantém quem começou
+        this.roundStarter = result === 'draw'? this.roundStarter : result;
+        this.turn = this.roundStarter;
+
+        setTimeout(() => {
+            this.render();
+            this.updateStatus(this.turn === 'player'? 'Sua vez de começar!' : 'Computador começa...');
+            if (this.turn === 'computer') {
+                setTimeout(() => this.computerPlayFirst(), 1000);
+            }
+        }, 1500);
+    }
+
+    checkHandWinner() {
+        if (this.playerRoundWins === 2) return 'player';
+        if (this.computerRoundWins === 2) return 'computer';
+        if (this.currentRound === 2) {
+            if (this.playerRoundWins === 1 && this.computerRoundWins === 0) return 'player';
+            if (this.computerRoundWins === 1 && this.playerRoundWins === 0) return 'computer';
+        }
+        if (this.currentRound === 3) {
+            if (this.playerRoundWins > this.computerRoundWins) return 'player';
+            if (this.computerRoundWins > this.playerRoundWins) return 'computer';
+            return 'draw';
+        }
+        return null;
+    }
+
+    endHand(winner) {
+        if (winner === 'draw') {
+            this.updateStatus('⚖️ Mão empatada! Ninguém pontua.');
+        } else {
+            const points = this.trucoValue;
+            if (winner === 'player') {
+                this.playerScore += points;
+                this.updateStatus(`🎉 Você ganhou a mão! +${points}`);
+            } else {
+                this.computerScore += points;
+                this.updateStatus(`🤖 Computador ganhou a mão! +${points}`);
+            }
+        }
+        this.updateScores();
+
+        if (this.playerScore >= 12 || this.computerScore >= 12) {
+            const finalWinner = this.playerScore >= 12? 'Você' : 'Computador';
+            setTimeout(() => alert(`🏆 ${finalWinner} venceu a partida! 🏆`), 500);
+            setTimeout(() => this.resetGame(), 1000);
+        } else {
+            setTimeout(() => this.resetHand(), 2200);
+        }
+    }
+
+    resetHand() {
+        // Alterna quem começa a mão
+        this.handStarter = this.handStarter === 'player'? 'computer' : 'player';
+        this.createDeck();
+        this.shuffleDeck();
+        this.distributeCards();
+        this.playerCard = null;
+        this.computerCard = null;
+        this.currentRound = 1;
+        this.playerRoundWins = 0;
+        this.computerRoundWins = 0;
+        this.trucoRequested = false;
+        this.trucoValue = 1;
+        this.waitingTrucoResponse = false;
+        this.gameActive = true;
+        this.selectedCardIndex = null;
+        this.roundStarter = this.handStarter;
+        this.turn = this.roundStarter;
         this.render();
-      }
+        this.updateStatus(this.turn === 'player'? 'Nova mão! Sua vez.' : 'Nova mão! Computador começa...');
+        if (this.turn === 'computer') {
+            setTimeout(() => this.computerPlayFirst(), 1200);
+        }
     }
-  }
 
-  makeMove(move){
-    this.history.push({
-      board:this.board.map(r=>r.slice()),
-      current:this.current,
-      capturesRed:this.capturesRed,
-      capturesBlack:this.capturesBlack
-    });
-    const [fr,fc]=move.from;
-    const [tr,tc]=move.to;
-    const piece=this.board[fr][fc];
-    this.board[fr][fc]=0;
-    // remove captured
-    for(const [cr,cc] of move.captures){
-      const cap=this.board[cr][cc];
-      if(cap<0) this.capturesRed++;
-      if(cap>0) this.capturesBlack++;
-      this.board[cr][cc]=0;
+    resetGame() {
+        this.playerScore = 0;
+        this.computerScore = 0;
+        this.handStarter = 'player';
+        this.resetHand();
+        this.updateScores();
     }
-    let newPiece=piece;
-    if(!this.isKing(piece) && ((piece>0 && tr===0) || (piece<0 && tr===7))){
-      newPiece=piece>0?2:-2;
+
+    playerPlay(cardIndex) {
+        if (!this.gameActive || this.waitingTrucoResponse || this.turn!== 'player' || this.playerCard!== null) return;
+
+        this.selectedCardIndex = cardIndex;
+        this.playerCard = this.playerHand[cardIndex];
+        this.playerHand.splice(cardIndex, 1);
+        this.updateStatus(`Você jogou ${this.playerCard.rank}${this.playerCard.suit}`);
+        this.render();
+
+        // Se o computador já jogou, fecha a rodada. Senão, é a vez do computador
+        if (this.computerCard!== null) {
+            setTimeout(() => this.playRound(), 800);
+        } else {
+            this.turn = 'computer';
+            setTimeout(() => this.computerPlay(), 900);
+        }
     }
-    this.board[tr][tc]=newPiece;
-    this.selected=null;
-    this.legalMoves=[];
-    this.current*=-1;
-    this.updateScores();
-    this.render();
-    this.checkGameOver();
-    if(this.current===-1){
-      this.updateStatus('Vez do computador...');
-      setTimeout(()=>this.computerMove(),600);
-    }else{
-      this.updateStatus('Sua vez!');
+
+    computerPlayFirst() {
+        if (!this.gameActive || this.waitingTrucoResponse || this.turn!== 'computer' || this.computerCard!== null) return;
+
+        let bestIdx = 0, bestVal = -1;
+        for (let i = 0; i < this.computerHand.length; i++) {
+            const v = this.getCardValue(this.computerHand[i]);
+            if (v > bestVal) { bestVal = v; bestIdx = i; }
+        }
+        this.computerCard = this.computerHand[bestIdx];
+        this.computerHand.splice(bestIdx, 1);
+        this.updateStatus(`Computador jogou ${this.computerCard.rank}${this.computerCard.suit}. Sua vez!`);
+        this.turn = 'player';
+        this.render();
     }
-  }
 
-  computerMove(){
-    const moves=this.getAllMoves(-1);
-    if(moves.length===0){ this.updateStatus('Você venceu!'); return; }
-    // Prefer captures with most pieces
-    moves.sort((a,b)=>b.captures.length-a.captures.length);
-    const bestCap = moves[0].captures.length;
-    const best = moves.filter(m=>m.captures.length===bestCap);
-    const choice = best[Math.floor(Math.random()*best.length)];
-    this.makeMove(choice);
-  }
+    computerPlay() {
+        if (!this.gameActive || this.waitingTrucoResponse || this.computerCard!== null) return;
 
-  checkGameOver(){
-    const redMoves=this.getAllMoves(1).length;
-    const blackMoves=this.getAllMoves(-1).length;
-    if(redMoves===0){ this.updateStatus('Computador venceu!'); }
-    if(blackMoves===0){ this.updateStatus('Você venceu!'); }
-  }
+        let bestIdx = 0, bestVal = -1;
+        for (let i = 0; i < this.computerHand.length; i++) {
+            const v = this.getCardValue(this.computerHand[i]);
+            if (v > bestVal) { bestVal = v; bestIdx = i; }
+        }
+        this.computerCard = this.computerHand[bestIdx];
+        this.computerHand.splice(bestIdx, 1);
+        this.updateStatus(`Computador jogou ${this.computerCard.rank}${this.computerCard.suit}`);
+        this.render();
+        setTimeout(() => this.playRound(), 1000);
+    }
 
-  updateScores(){
-    this.scoreRedEl.textContent=this.capturesRed;
-    this.scoreBlackEl.textContent=this.capturesBlack;
-  }
+    requestTruco() {
+        if (!this.gameActive || this.waitingTrucoResponse || this.trucoRequested || this.currentRound > 1) return;
+        this.trucoRequested = true;
+        this.waitingTrucoResponse = true;
+        this.gameActive = false;
+        this.updateStatus('Você pediu TRUCO!');
+        this.render();
+        setTimeout(() => {
+            Math.random() < 0.6? this.acceptTruco() : this.rejectTruco();
+        }, 1500);
+    }
 
-  updateStatus(msg){
-    this.statusEl.textContent=`${msg} | Regra: ${this.rules.charAt(0).toUpperCase()+this.rules.slice(1)}`;
-  }
+    acceptTruco() {
+        this.trucoValue = this.trucoValue === 1? 3 : this.trucoValue === 3? 6 : this.trucoValue === 6? 9 : 12;
+        this.waitingTrucoResponse = false;
+        this.gameActive = true;
+        this.updateStatus(`✅ Aceito! Valendo ${this.trucoValue}`);
+        this.updateScores();
+        this.render();
+    }
 
-  undo(){
-    if(this.history.length===0) return;
-    const last=this.history.pop();
-    this.board=last.board.map(r=>r.slice());
-    this.current=last.current;
-    this.capturesRed=last.capturesRed;
-    this.capturesBlack=last.capturesBlack;
-    this.selected=null;
-    this.legalMoves=[];
-    this.updateScores();
-    this.render();
-    this.updateStatus('Jogada desfeita');
-  }
+    rejectTruco() {
+        this.playerScore += this.trucoValue;
+        this.updateStatus(`❌ Computador correu! Você ganha ${this.trucoValue}`);
+        this.updateScores();
+        setTimeout(() => this.resetHand(), 2000);
+    }
+
+    updateStatus(msg) {
+        document.getElementById('status-message').textContent = msg;
+        const turnEl = document.getElementById('turn-indicator');
+        if (turnEl) turnEl.textContent = this.turn === 'player'? 'Você' : 'Computador';
+    }
+
+    updateScores() {
+        document.getElementById('player-score').textContent = this.playerScore;
+        document.getElementById('computer-score').textContent = this.computerScore;
+        document.getElementById('round-number').textContent = this.currentRound;
+        document.getElementById('round-points').textContent = this.trucoValue;
+    }
+
+    getCardDisplay(card, faceDown = false, isManilha = false) {
+        if (faceDown) {
+            return `<div class="card card-back"><div class="card-suit">?</div></div>`;
+        }
+        const suitClass = (card.suit === '♥' || card.suit === '♦')? 'hearts' : 'spades';
+        const star = isManilha? ' ⭐' : '';
+        return `<div class="card ${suitClass}"><div class="card-rank">${card.rank}${star}</div><div class="card-suit">${card.suit}</div></div>`;
+    }
+
+    render() {
+        const playerDiv = document.getElementById('player-cards');
+        playerDiv.innerHTML = '';
+        this.playerHand.forEach((card, idx) => {
+            const isManilha = this.manilhas.some(m => m.rank === card.rank);
+            const wrap = document.createElement('div');
+            wrap.innerHTML = this.getCardDisplay(card, false, isManilha);
+            const node = wrap.firstChild;
+            if (idx === this.selectedCardIndex) node.classList.add('selected');
+            node.addEventListener('click', () => {
+                if (this.playerCard === null && this.gameActive &&!this.waitingTrucoResponse && this.turn === 'player') {
+                    document.querySelectorAll('#player-cards.card').forEach(c => c.classList.remove('selected'));
+                    node.classList.add('selected');
+                    this.selectedCardIndex = idx;
+                    document.getElementById('play-hand').disabled = false;
+                    this.updateStatus(`Carta ${card.rank}${card.suit} selecionada`);
+                }
+            });
+            if (this.playerCard!== null ||!this.gameActive || this.waitingTrucoResponse || this.turn!== 'player') {
+                node.style.opacity = '0.5';
+                node.style.cursor = 'not-allowed';
+            }
+            playerDiv.appendChild(node);
+        });
+
+        const compDiv = document.getElementById('computer-cards');
+        compDiv.innerHTML = '';
+        for (let i = 0; i < this.computerHand.length; i++) {
+            const div = document.createElement('div');
+            div.innerHTML = this.getCardDisplay(null, true);
+            compDiv.appendChild(div.firstChild);
+        }
+
+        document.getElementById('vira-card').innerHTML = this.getCardDisplay(this.vira);
+
+        const pTable = document.getElementById('player-table-card');
+        const cTable = document.getElementById('computer-table-card');
+        pTable.innerHTML = this.playerCard? this.getCardDisplay(this.playerCard, false, this.manilhas.some(m => m.rank === this.playerCard.rank)) : '<div class="card" style="opacity:0.25;background:rgba(0,0,0,0.3);border:2px dashed rgba(255,215,0,0.3);"></div>';
+        cTable.innerHTML = this.computerCard? this.getCardDisplay(this.computerCard, false, this.manilhas.some(m => m.rank === this.computerCard.rank)) : '<div class="card" style="opacity:0.25;background:rgba(0,0,0,0.3);border:2px dashed rgba(255,215,0,0.3);"></div>';
+
+        const playBtn = document.getElementById('play-hand');
+        const trucoBtn = document.getElementById('truco-btn');
+        const acceptBtn = document.getElementById('accept-truco');
+        const rejectBtn = document.getElementById('reject-truco');
+
+        if (this.waitingTrucoResponse) {
+            playBtn.disabled = true;
+            trucoBtn.disabled = true;
+            acceptBtn.classList.remove('hidden');
+            rejectBtn.classList.remove('hidden');
+        } else {
+            playBtn.disabled = (this.playerCard!== null ||!this.gameActive || this.selectedCardIndex === null || this.turn!== 'player');
+            trucoBtn.disabled = (this.trucoRequested ||!this.gameActive || this.playerCard!== null || this.currentRound > 1);
+            acceptBtn.classList.add('hidden');
+            rejectBtn.classList.add('hidden');
+        }
+    }
+
+    setupEventListeners() {
+        document.getElementById('play-hand').addEventListener('click', () => {
+            if (this.selectedCardIndex!== null && this.playerCard === null && this.turn === 'player') {
+                this.playerPlay(this.selectedCardIndex);
+            }
+        });
+        document.getElementById('truco-btn').addEventListener('click', () => this.requestTruco());
+        document.getElementById('accept-truco').addEventListener('click', () => this.acceptTruco());
+        document.getElementById('reject-truco').addEventListener('click', () => this.rejectTruco());
+        document.getElementById('new-game').addEventListener('click', () => this.resetGame());
+    }
 }
 
-window.addEventListener('DOMContentLoaded',()=>new DamasGame());
+window.addEventListener('DOMContentLoaded', () => {
+    window.game = new TrucoGame();
+});
