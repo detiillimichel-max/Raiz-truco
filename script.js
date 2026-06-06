@@ -117,11 +117,13 @@ class TrucoGame {
             return;
         }
 
+        // Prepara próxima rodada
         this.currentRound++;
         this.playerCard = null;
         this.computerCard = null;
         this.selectedCardIndex = null;
 
+        // Quem venceu começa a próxima. Empate mantém quem começou
         this.roundStarter = result === 'draw'? this.roundStarter : result;
         this.turn = this.roundStarter;
 
@@ -174,6 +176,7 @@ class TrucoGame {
     }
 
     resetHand() {
+        // Alterna quem começa a mão
         this.handStarter = this.handStarter === 'player'? 'computer' : 'player';
         this.createDeck();
         this.shuffleDeck();
@@ -207,17 +210,25 @@ class TrucoGame {
 
     playerPlay(cardIndex) {
         if (!this.gameActive || this.waitingTrucoResponse || this.turn!== 'player' || this.playerCard!== null) return;
+
         this.selectedCardIndex = cardIndex;
         this.playerCard = this.playerHand[cardIndex];
         this.playerHand.splice(cardIndex, 1);
         this.updateStatus(`Você jogou ${this.playerCard.rank}${this.playerCard.suit}`);
-        this.turn = 'computer';
         this.render();
-        setTimeout(() => this.computerPlay(), 900);
+
+        // Se o computador já jogou, fecha a rodada. Senão, é a vez do computador
+        if (this.computerCard!== null) {
+            setTimeout(() => this.playRound(), 800);
+        } else {
+            this.turn = 'computer';
+            setTimeout(() => this.computerPlay(), 900);
+        }
     }
 
     computerPlayFirst() {
         if (!this.gameActive || this.waitingTrucoResponse || this.turn!== 'computer' || this.computerCard!== null) return;
+
         let bestIdx = 0, bestVal = -1;
         for (let i = 0; i < this.computerHand.length; i++) {
             const v = this.getCardValue(this.computerHand[i]);
@@ -231,7 +242,8 @@ class TrucoGame {
     }
 
     computerPlay() {
-        if (!this.gameActive || this.waitingTrucoResponse || this.turn!== 'computer' || this.computerCard!== null) return;
+        if (!this.gameActive || this.waitingTrucoResponse || this.computerCard!== null) return;
+
         let bestIdx = 0, bestVal = -1;
         for (let i = 0; i < this.computerHand.length; i++) {
             const v = this.getCardValue(this.computerHand[i]);
@@ -274,7 +286,8 @@ class TrucoGame {
 
     updateStatus(msg) {
         document.getElementById('status-message').textContent = msg;
-        document.getElementById('turn-indicator').textContent = this.turn === 'player'? 'Você' : 'Computador';
+        const turnEl = document.getElementById('turn-indicator');
+        if (turnEl) turnEl.textContent = this.turn === 'player'? 'Você' : 'Computador';
     }
 
     updateScores() {
@@ -349,7 +362,6 @@ class TrucoGame {
             acceptBtn.classList.add('hidden');
             rejectBtn.classList.add('hidden');
         }
-        document.getElementById('turn-indicator').textContent = this.turn === 'player'? 'Você' : 'Computador';
     }
 
     setupEventListeners() {
