@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truco Paulista</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🃏 Truco Paulista 🃏</h1>
+            <div class="score-board">
+                <div class="score player-score">
+                    <span class="label">Você</span>
+                    <span class="value" id="player-score">0</span>
+                </div>
+                <div class="score vs">VS</div>
+                <div class="score computer-score">
+                    <span class="label">Computador</span>
+                    <span class="value" id="computer-score">0</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="game-status" id="game-status">
+            <span id="status-message">Clique em "Nova Partida" para começar</span>
+        </div>
+
+        <div class="game-area">
+            <div class="computer-area">
+                <h3>🤖 Computador</h3>
+                <div id="computer-cards" class="cards computer-cards"></div>
+            </div>
+
+            <div class="table-area">
+                <div class="round-info">
+                    <div>Rodada: <span id="round-number">1</span>/3</div>
+                    <div>Valor da Mão: <span id="round-points">1</span></div>
+                    <div>Vez: <span id="turn-indicator">Você</span></div>
+                </div>
+
+                <div class="vira-area">
+                    <div class="vira-label">🔮 Vira</div>
+                    <div id="vira-card" class="vira-card"></div>
+                </div>
+
+                <div class="table-cards" id="table-cards">
+                    <div class="player-table">
+                        <div class="table-label">Você</div>
+                        <div id="player-table-card" class="table-slot"></div>
+                    </div>
+                    <div class="computer-table">
+                        <div class="table-label">Computador</div>
+                        <div id="computer-table-card" class="table-slot"></div>
+                    </div>
+                </div>
+
+                <div class="actions" id="actions">
+                    <button id="play-hand" class="btn btn-primary" disabled>Jogar</button>
+                    <button id="truco-btn" class="btn btn-danger" disabled>Truco!</button>
+                    <button id="accept-truco" class="btn btn-success hidden">Aceitar</button>
+                    <button id="reject-truco" class="btn btn-danger hidden">Correr</button>
+                    <button id="new-game" class="btn btn-secondary">Nova Partida</button>
+                </div>
+            </div>
+
+            <div class="player-area">
+                <h3>🙋 Suas Cartas</h3>
+                <div id="player-cards" class="cards player-cards"></div>
+            </div>
+        </div>
+
+        <div class="rules">
+            <details>
+                <summary>📖 Regras do Truco</summary>
+                <p><strong>Manilhas:</strong> Paus ♣ > Copas ♥ > Espadas ♠ > Ouros ♦</p>
+                <p><strong>Ordem:</strong> 4 < 5 < 6 < 7 < Q < J < K < A < 2 < 3 < Manilhas</p>
+                <p><strong>Vantagem:</strong> Quem vence a 1ª rodada tem vantagem no empate</p>
+            </details>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
